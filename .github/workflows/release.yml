@@ -25,6 +25,14 @@ jobs:
           node-version: "lts/*"
           cache: "npm"
 
+      # ✅ Add this: force Python 3.11 so node-gyp/node-pty can build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Ensure Python packaging tools
+        run: python -m pip install --upgrade pip setuptools
+
       - name: Install deps
         run: npm ci
 
