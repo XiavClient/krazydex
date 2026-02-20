@@ -1,6 +1,6 @@
 {
     "name": "krazydex",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "Sci-fi terminal dashboard (xterm + node-pty) with GitHub Releases via electron-builder",
     "author": "XiavClient <xiavclient@gmail.com>",
     "private": true,
