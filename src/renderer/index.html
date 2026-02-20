@@ -1,0 +1,69 @@
+﻿<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KrazyDEX</title>
+
+    <link rel="stylesheet" href="./vendor/xterm.css" />
+    <link rel="stylesheet" href="./ui.css" />
+</head>
+
+<body>
+    <div id="bg-grid"></div>
+    <div id="scanlines"></div>
+
+    <header id="topbar">
+        <div class="brand">KrazyDEX</div>
+        <div class="subtitle">terminal // telemetry</div>
+        <div class="stats" id="stats">
+            <span>CPU: --%</span>
+            <span>MEM: ----/----</span>
+            <span>NET: ↓-- KB/s ↑-- KB/s</span>
+        </div>
+    </header>
+
+    <main id="layout">
+        <section id="leftpane">
+            <div class="panel">
+                <div class="panel-title">SYSTEM</div>
+                <div class="panel-body">
+                    <div class="bar">
+                        <div class="bar-label">CPU</div>
+                        <div class="bar-track"><div class="bar-fill" id="cpuBar"></div></div>
+                    </div>
+                    <div class="bar">
+                        <div class="bar-label">MEM</div>
+                        <div class="bar-track"><div class="bar-fill" id="memBar"></div></div>
+                    </div>
+                    <div class="hint">Tip: press <kbd>Ctrl</kbd>+<kbd>L</kbd> to clear</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="terminalWrap">
+            <div id="terminal"></div>
+        </section>
+
+        <section id="rightpane">
+            <div class="panel">
+                <div class="panel-title">SHORTCUTS</div>
+                <div class="panel-body">
+                    <div class="kv"><span>Clear</span><span>Ctrl+L</span></div>
+                    <div class="kv"><span>Copy</span><span>Ctrl+Shift+C</span></div>
+                    <div class="kv"><span>Paste</span><span>Ctrl+Shift+V</span></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer id="bottombar">
+        <div class="status-dot"></div>
+        <div class="status-text" id="status">booting…</div>
+    </footer>
+
+    <script src="./bundle.js"></script>
+</body>
+</html>
