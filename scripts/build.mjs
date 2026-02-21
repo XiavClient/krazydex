@@ -3,54 +3,42 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const root = process.cwd();
-const distDir = path.join(root, "dist");
-const distMain = path.join(distDir, "main");
-const distRenderer = path.join(distDir, "renderer");
-const distVendor = path.join(distRenderer, "vendor");
+const dist = path.join(root, "dist");
+const distMain = path.join(dist, "main");
+const distR = path.join(dist, "renderer");
+const distV = path.join(distR, "vendor");
 
-async function clean() {
-    await fs.rm(distDir, { recursive: true, force: true });
-    await fs.mkdir(distMain, { recursive: true });
-    await fs.mkdir(distRenderer, { recursive: true });
-    await fs.mkdir(distVendor, { recursive: true });
+async function rmrf(p) { await fs.rm(p, { recursive: true, force: true }); }
+async function mkdirp(p) { await fs.mkdir(p, { recursive: true }); }
+async function copy(src, dst) {
+    await mkdirp(path.dirname(dst));
+    await fs.copyFile(src, dst);
 }
 
-async function copyFile(src, dest) {
-    await fs.mkdir(path.dirname(dest), { recursive: true });
-    await fs.copyFile(src, dest);
-}
+await rmrf(dist);
+await mkdirp(distMain);
+await mkdirp(distR);
+await mkdirp(distV);
 
-async function copyStatic() {
-    await copyFile("src/main/main.js", "dist/main/main.js");
-    await copyFile("src/main/preload.js", "dist/main/preload.js");
+// main/preload
+await copy("src/main/main.js", "dist/main/main.js");
+await copy("src/main/preload.js", "dist/main/preload.js");
 
-    await copyFile("src/renderer/index.html", "dist/renderer/index.html");
-    await copyFile("src/renderer/ui.css", "dist/renderer/ui.css");
+// renderer
+await copy("src/renderer/index.html", "dist/renderer/index.html");
+await copy("src/renderer/ui.css", "dist/renderer/ui.css");
+await copy("node_modules/@xterm/xterm/css/xterm.css", "dist/renderer/vendor/xterm.css");
 
-    await copyFile(
-        "node_modules/@xterm/xterm/css/xterm.css",
-        "dist/renderer/vendor/xterm.css"
-    );
-}
-
-async function bundleRenderer() {
-    await esbuild.build({
-        entryPoints: ["src/renderer/app.js"],
-        bundle: true,
-        platform: "browser",
-        format: "iife",
-        minify: true,
-        sourcemap: false,
-        target: ["chrome120"],
-        outfile: "dist/renderer/bundle.js",
-        define: {
-            "process.env.NODE_ENV": "\"production\""
-        }
-    });
-}
-
-await clean();
-await copyStatic();
-await bundleRenderer();
+// bundle renderer JS
+await esbuild.build({
+    entryPoints: ["src/renderer/app.js"],
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    minify: true,
+    target: ["chrome120"],
+    outfile: "dist/renderer/bundle.js",
+    define: { "process.env.NODE_ENV": "\"production\"" }
+});
 
 console.log("✅ Build complete: dist/");

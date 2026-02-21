@@ -1,8 +1,8 @@
 {
-    "name": "krazydex",
-    "version": "0.1.4",
-    "description": "Sci-fi terminal dashboard (xterm + node-pty) with GitHub Releases via electron-builder",
-    "author": "XiavClient <xiavclient@gmail.com>",
+    "name": "krazydex-ultra",
+    "version": "0.1.0",
+    "description": "KrazyDEX ULTRA — eDEX-style terminal cockpit with telemetry, browser, tools",
+    "author": "XiavClient <itzxiav@gmail.com>",
     "private": true,
     "main": "dist/main/main.js",
     "scripts": {
@@ -14,55 +14,40 @@
     },
     "dependencies": {
         "@xterm/addon-fit": "^0.11.0",
+        "@xterm/addon-search": "^0.15.0",
+        "@xterm/addon-web-links": "^0.11.0",
         "@xterm/xterm": "^6.0.0",
         "node-pty": "^1.0.0",
         "systeminformation": "^5.0.0"
     },
     "devDependencies": {
         "electron": "^33.0.0",
-        "electron-builder": "^25.0.0",
+        "electron-builder": "^25.1.8",
         "esbuild": "^0.25.0"
     },
     "build": {
-        "appId": "com.example.krazydex",
-        "productName": "KrazyDEX",
-        "directories": {
-            "output": "release"
-        },
-        "files": [
-            "dist/**"
-        ],
+        "appId": "com.xiavclient.krazydex",
+        "productName": "KrazyDEX ULTRA",
+        "directories": { "output": "release" },
+        "files": [ "dist/**" ],
         "asar": true,
-        "asarUnpack": [
-            "**/*.node"
-        ],
-        "publish": [
-            {
-                "provider": "github"
-            }
-        ],
+        "asarUnpack": [ "**/*.node" ],
+        "publish": [ { "provider": "github" } ],
         "win": {
             "target": [
                 {
                     "target": "nsis",
-                    "arch": [
-                        "x64"
-                    ]
+                    "arch": [ "x64" ]
                 }
             ],
             "artifactName": "${productName}-Windows-${version}-Setup.${ext}"
         },
         "mac": {
-            "target": [
-                "dmg"
-            ],
+            "target": [ "dmg" ],
             "artifactName": "${productName}-macOS-${version}.${ext}"
         },
         "linux": {
-            "target": [
-                "AppImage",
-                "deb"
-            ],
+            "target": [ "AppImage", "deb" ],
             "artifactName": "${productName}-Linux-${version}.${ext}"
         }
     }

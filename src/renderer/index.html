@@ -2,67 +2,300 @@
 <html>
 <head>
     <meta charset="UTF-8" />
+
+    <!-- Allow Wikipedia fetch + keep app locked down -->
     <meta http-equiv="Content-Security-Policy"
-          content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;">
+          content="
+        default-src 'self';
+        script-src 'self';
+        style-src 'self';
+        img-src 'self' data:;
+        connect-src 'self' https://*.wikipedia.org https://*.wikimedia.org;
+      ">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>KrazyDEX</title>
+    <title>KrazyDEX ULTRA</title>
 
     <link rel="stylesheet" href="./vendor/xterm.css" />
     <link rel="stylesheet" href="./ui.css" />
 </head>
 
 <body>
-    <div id="bg-grid"></div>
+    <div id="bgGrid"></div>
+    <div id="bgGlow"></div>
     <div id="scanlines"></div>
 
-    <header id="topbar">
-        <div class="brand">KrazyDEX</div>
-        <div class="subtitle">terminal // telemetry</div>
-        <div class="stats" id="stats">
-            <span>CPU: --%</span>
-            <span>MEM: ----/----</span>
-            <span>NET: ↓-- KB/s ↑-- KB/s</span>
+    <!-- ULTRA BOOT -->
+    <div id="boot" class="boot">
+        <div class="bootCard">
+            <div class="bootTop">
+                <div class="bootBrand">KRAZYDEX ULTRA</div>
+                <div class="bootSub">hyper-cockpit initializing</div>
+            </div>
+
+            <pre id="bootAscii" class="bootAscii"></pre>
+
+            <div class="bootRow">
+                <pre id="bootLog" class="bootLog"></pre>
+                <pre id="bootHex" class="bootHex"></pre>
+            </div>
+
+            <div class="bootProg">
+                <div class="bootBar"><div id="bootFill" class="bootFill"></div></div>
+                <div id="bootPct" class="bootPct">0%</div>
+            </div>
+
+            <div class="bootHint">Tip: Ctrl+K = palette • Ctrl+F = terminal search</div>
+        </div>
+    </div>
+
+    <!-- Palette -->
+    <div id="palette" class="palette hidden">
+        <div class="palCard">
+            <div class="palTitle">COMMAND PALETTE</div>
+            <input id="palInput" class="palInput" placeholder="type… (enter to run, esc to close)" />
+            <div id="palList" class="palList"></div>
+        </div>
+    </div>
+
+    <!-- Topbar -->
+    <header class="topbar">
+        <div class="brand">
+            <div class="brandName">KRAZYDEX</div>
+            <div id="brandMeta" class="brandMeta">ULTRA</div>
+        </div>
+
+        <nav class="tabs">
+            <button class="tab active" data-view="terminal">TERMINAL</button>
+            <button class="tab" data-view="system">SYSTEM</button>
+            <button class="tab" data-view="browser">BROWSER</button>
+            <button class="tab" data-view="knowledge">KNOWLEDGE</button>
+            <button class="tab" data-view="tools">TOOLS</button>
+            <button class="tab" data-view="settings">SETTINGS</button>
+        </nav>
+
+        <div class="topRight">
+            <div id="mini" class="mini">CPU --% • MEM --%</div>
+            <button id="btnFull" class="chip">FULL</button>
+            <button id="btnAOT" class="chip">AOT</button>
+            <button id="btnPal" class="chip">⌘K</button>
         </div>
     </header>
 
-    <main id="layout">
-        <section id="leftpane">
+    <!-- Main Grid -->
+    <main class="grid">
+        <!-- Left -->
+        <aside class="side">
             <div class="panel">
-                <div class="panel-title">SYSTEM</div>
-                <div class="panel-body">
-                    <div class="bar">
-                        <div class="bar-label">CPU</div>
-                        <div class="bar-track"><div class="bar-fill" id="cpuBar"></div></div>
+                <div class="pt">SESSIONS</div>
+                <div class="pb">
+                    <div class="row">
+                        <button id="newSess" class="btn">NEW</button>
+                        <button id="killSess" class="btn danger">KILL</button>
+                        <button id="toggleSplit" class="btn">SPLIT</button>
                     </div>
-                    <div class="bar">
-                        <div class="bar-label">MEM</div>
-                        <div class="bar-track"><div class="bar-fill" id="memBar"></div></div>
-                    </div>
-                    <div class="hint">Tip: press <kbd>Ctrl</kbd>+<kbd>L</kbd> to clear</div>
+                    <div id="sessList" class="list"></div>
                 </div>
+            </div>
+
+            <div class="panel">
+                <div class="pt">TELEMETRY</div>
+                <div class="pb">
+                    <div class="meter">
+                        <div class="ml">CPU</div>
+                        <div class="mt"><div id="cpuBar" class="mf"></div></div>
+                    </div>
+                    <div class="meter">
+                        <div class="ml">MEM</div>
+                        <div class="mt"><div id="memBar" class="mf"></div></div>
+                    </div>
+
+                    <canvas id="gCpu" class="graph" width="280" height="90"></canvas>
+                    <canvas id="gNet" class="graph" width="280" height="90"></canvas>
+
+                    <div id="hw" class="hw">—</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center -->
+        <section class="center">
+            <!-- Browser controls -->
+            <div id="bControls" class="bControls hidden">
+                <button id="bBack" class="nav">⟵</button>
+                <button id="bFwd" class="nav">⟶</button>
+                <button id="bReload" class="nav">⟳</button>
+                <input id="bUrl" class="url" placeholder="type url and press enter" />
+                <button id="bGo" class="nav">GO</button>
+                <button id="bStar" class="nav">★</button>
+            </div>
+
+            <!-- Views -->
+            <div class="views">
+                <!-- Terminal -->
+                <section class="view show" data-view="terminal">
+                    <div class="tbar">
+                        <input id="tSearch" class="tSearch" placeholder="search terminal… (enter next, shift+enter prev)" />
+                        <div class="tBtns">
+                            <button id="tClear" class="btn">CLEAR</button>
+                            <button id="tCopy" class="btn">COPY</button>
+                            <button id="tPaste" class="btn">PASTE</button>
+                            <button id="tFontUp" class="btn">A+</button>
+                            <button id="tFontDn" class="btn">A-</button>
+                        </div>
+                    </div>
+
+                    <div class="splitWrap">
+                        <div class="pane">
+                            <div class="paneHead">
+                                <span>PANE A</span>
+                                <select id="selA" class="sel"></select>
+                            </div>
+                            <div id="mountA" class="mount"></div>
+                        </div>
+
+                        <div id="paneB" class="pane hidden">
+                            <div class="paneHead">
+                                <span>PANE B</span>
+                                <select id="selB" class="sel"></select>
+                            </div>
+                            <div id="mountB" class="mount"></div>
+                        </div>
+
+                        <div id="stash" class="stash"></div>
+                    </div>
+                </section>
+
+                <!-- System -->
+                <section class="view" data-view="system">
+                    <div class="big">
+                        <div class="bigT">TOP PROCESSES</div>
+                        <div id="procs" class="table"></div>
+                    </div>
+                    <div class="big">
+                        <div class="bigT">DISKS</div>
+                        <div id="disks" class="table"></div>
+                    </div>
+                </section>
+
+                <!-- Browser -->
+                <section class="view" data-view="browser">
+                    <div class="big">
+                        <div class="bigT">BROWSER</div>
+                        <div class="bigP">
+                            This is a real Electron BrowserView (not HTML iframe). Use the top controls.
+                        </div>
+                        <div class="bigT2">BOOKMARKS</div>
+                        <div id="marks" class="marks"></div>
+                    </div>
+                </section>
+
+                <!-- Knowledge -->
+                <section class="view" data-view="knowledge">
+                    <div class="big">
+                        <div class="bigT">KNOWLEDGE BOT</div>
+                        <div class="bigP">
+                            Ask “what is …”, “who is …”, “tell me about …”. Pulls Wikipedia summaries.
+                        </div>
+                        <div class="chat">
+                            <div id="chatLog" class="chatLog"></div>
+                            <form id="chatForm" class="chatForm" autocomplete="off">
+                                <input id="chatInput" class="chatInput" placeholder="Ask a question…" />
+                                <button class="chatBtn" type="submit">ASK</button>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Tools -->
+                <section class="view" data-view="tools">
+                    <div class="tools">
+                        <div class="big">
+                            <div class="bigT">CALC</div>
+                            <div class="row2">
+                                <input id="calcIn" class="inp" placeholder="(12*4)+3" />
+                                <button id="calcRun" class="btn">RUN</button>
+                            </div>
+                            <pre id="calcOut" class="pre">Result: —</pre>
+                        </div>
+
+                        <div class="big">
+                            <div class="bigT">NOTES</div>
+                            <textarea id="notes" class="ta" placeholder="autosaves…"></textarea>
+                        </div>
+
+                        <div class="big">
+                            <div class="bigT">BASE64</div>
+                            <div class="row2">
+                                <button id="b64Enc" class="btn">ENC</button>
+                                <button id="b64Dec" class="btn">DEC</button>
+                            </div>
+                            <textarea id="b64Box" class="ta" placeholder="text here…"></textarea>
+                        </div>
+
+                        <div class="big">
+                            <div class="bigT">JSON PRETTY</div>
+                            <button id="jsonFmt" class="btn">FORMAT</button>
+                            <textarea id="jsonBox" class="ta" placeholder='{"a":1}'></textarea>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Settings -->
+                <section class="view" data-view="settings">
+                    <div class="big">
+                        <div class="bigT">VISUALS</div>
+                        <div class="setRow">
+                            <label>Theme</label>
+                            <select id="theme" class="sel">
+                                <option value="cyan">Cyan Reactor</option>
+                                <option value="mono">Monochrome</option>
+                                <option value="magenta">Magenta Neon</option>
+                            </select>
+                        </div>
+                        <div class="setRow">
+                            <label>Scanlines</label>
+                            <input id="scan" type="checkbox" checked />
+                        </div>
+                        <div class="setRow">
+                            <label>Grid</label>
+                            <input id="grid" type="checkbox" checked />
+                        </div>
+                        <div class="setRow">
+                            <label>Motion</label>
+                            <input id="motion" type="checkbox" checked />
+                        </div>
+                        <div class="setRow">
+                            <label>Boot Animation</label>
+                            <input id="bootToggle" type="checkbox" checked />
+                        </div>
+                    </div>
+                </section>
             </div>
         </section>
 
-        <section id="terminalWrap">
-            <div id="terminal"></div>
-        </section>
-
-        <section id="rightpane">
+        <!-- Right -->
+        <aside class="side">
             <div class="panel">
-                <div class="panel-title">SHORTCUTS</div>
-                <div class="panel-body">
-                    <div class="kv"><span>Clear</span><span>Ctrl+L</span></div>
-                    <div class="kv"><span>Copy</span><span>Ctrl+Shift+C</span></div>
-                    <div class="kv"><span>Paste</span><span>Ctrl+Shift+V</span></div>
+                <div class="pt">STATUS</div>
+                <div class="pb">
+                    <div id="status" class="status">booting…</div>
+                    <div id="line" class="line">—</div>
+                    <div class="hint">Ctrl+K palette • Ctrl+F search • Click terminal links → Browser</div>
                 </div>
             </div>
-        </section>
+
+            <div class="panel">
+                <div class="pt">QUICK</div>
+                <div class="pb">
+                    <button id="qSys" class="btn">SYSTEMINFO</button>
+                    <button id="qIP" class="btn">IPCONFIG</button>
+                    <button id="qDir" class="btn">DIR</button>
+                    <button id="qWiki" class="btn">OPEN WIKI</button>
+                </div>
+            </div>
+        </aside>
     </main>
-
-    <footer id="bottombar">
-        <div class="status-dot"></div>
-        <div class="status-text" id="status">booting…</div>
-    </footer>
 
     <script src="./bundle.js"></script>
 </body>
