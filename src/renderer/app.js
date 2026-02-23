@@ -1,766 +1,441 @@
 ﻿import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { SearchAddon } from "@xterm/addon-search";
-import { WebLinksAddon } from "@xterm/addon-web-links";
 
 /* ---------- DOM ---------- */
-const $ = (id) => document.getElementById(id);
+const statusText = document.getElementById("statusText");
 
-const boot = $("boot");
-const bootAscii = $("bootAscii");
-const bootLog = $("bootLog");
-const bootHex = $("bootHex");
-const bootFill = $("bootFill");
-const bootPct = $("bootPct");
+// left
+const clockTime = document.getElementById("clockTime");
+const clockDate = document.getElementById("clockDate");
+const clockUptime = document.getElementById("clockUptime");
+const sysType = document.getElementById("sysType");
+const sysPlatform = document.getElementById("sysPlatform");
+const sysHost = document.getElementById("sysHost");
 
-const viewBtns = Array.from(document.querySelectorAll(".tab"));
-const views = Array.from(document.querySelectorAll(".view"));
-const bControls = $("bControls");
+const cpuPct = document.getElementById("cpuPct");
+const memPct = document.getElementById("memPct");
+const cpuBar = document.getElementById("cpuBar");
+const memBar = document.getElementById("memBar");
 
-const btnFull = $("btnFull");
-const btnAOT = $("btnAOT");
-const btnPal = $("btnPal");
+const cpuGraph = document.getElementById("cpuGraph");
+const netGraph = document.getElementById("netGraph");
+const globe = document.getElementById("globe");
 
-const sessList = $("sessList");
-const newSess = $("newSess");
-const killSess = $("killSess");
-const toggleSplit = $("toggleSplit");
+// center terminal
+const termEl = document.getElementById("terminal");
 
-const cpuBar = $("cpuBar");
-const memBar = $("memBar");
-const gCpu = $("gCpu");
-const gNet = $("gNet");
-const hw = $("hw");
-
-const status = $("status");
-const line = $("line");
-const mini = $("mini");
-
-const tSearch = $("tSearch");
-const tClear = $("tClear");
-const tCopy = $("tCopy");
-const tPaste = $("tPaste");
-const tFontUp = $("tFontUp");
-const tFontDn = $("tFontDn");
-
-const paneB = $("paneB");
-const selA = $("selA");
-const selB = $("selB");
-const mountA = $("mountA");
-const mountB = $("mountB");
-const stash = $("stash");
-
-const bBack = $("bBack");
-const bFwd = $("bFwd");
-const bReload = $("bReload");
-const bGo = $("bGo");
-const bUrl = $("bUrl");
-const bStar = $("bStar");
-const marks = $("marks");
-
-const procs = $("procs");
-const disks = $("disks");
-
-const chatLog = $("chatLog");
-const chatForm = $("chatForm");
-const chatInput = $("chatInput");
-
-const calcIn = $("calcIn");
-const calcRun = $("calcRun");
-const calcOut = $("calcOut");
-const notes = $("notes");
-const b64Enc = $("b64Enc");
-const b64Dec = $("b64Dec");
-const b64Box = $("b64Box");
-const jsonFmt = $("jsonFmt");
-const jsonBox = $("jsonBox");
-
-const themeSel = $("theme");
-const scan = $("scan");
-const grid = $("grid");
-const motion = $("motion");
-const bootToggle = $("bootToggle");
-
-const palette = $("palette");
-const palInput = $("palInput");
-const palList = $("palList");
-
-/* ---------- State ---------- */
-let split = false;
-let fontSize = Number(localStorage.getItem("fontSize") || 14);
-let activeView = "terminal";
-let browserState = { url: "", canGoBack: false, canGoForward: false, title: "" };
-
-const sessions = new Map(); // id -> { term, fit, search, hostDiv }
-let activeA = null;
-let activeB = null;
-
-/* ---------- Settings apply ---------- */
-function applySettings() {
-    const theme = localStorage.getItem("theme") || "cyan";
-    document.body.dataset.theme = theme;
-    themeSel.value = theme;
-
-    const scanOn = (localStorage.getItem("scan") ?? "1") === "1";
-    const gridOn = (localStorage.getItem("grid") ?? "1") === "1";
-    const motionOn = (localStorage.getItem("motion") ?? "1") === "1";
-    const bootOn = (localStorage.getItem("boot") ?? "1") === "1";
-
-    scan.checked = scanOn;
-    grid.checked = gridOn;
-    motion.checked = motionOn;
-    bootToggle.checked = bootOn;
-
-    $("scanlines").style.display = scanOn ? "block" : "none";
-    $("bgGrid").style.display = gridOn ? "block" : "none";
-    $("bgGrid").style.animation = motionOn ? "" : "none";
-}
-
-applySettings();
-
-themeSel.addEventListener("change", () => { localStorage.setItem("theme", themeSel.value); applySettings(); });
-scan.addEventListener("change", () => { localStorage.setItem("scan", scan.checked ? "1" : "0"); applySettings(); });
-grid.addEventListener("change", () => { localStorage.setItem("grid", grid.checked ? "1" : "0"); applySettings(); });
-motion.addEventListener("change", () => { localStorage.setItem("motion", motion.checked ? "1" : "0"); applySettings(); });
-bootToggle.addEventListener("change", () => localStorage.setItem("boot", bootToggle.checked ? "1" : "0"));
-
-/* ---------- Boot animation (ultra) ---------- */
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const ascii = [
-    "██╗  ██╗██████╗  █████╗ ███████╗██╗   ██╗██████╗ ███████╗██╗  ██╗",
-    "██║ ██╔╝██╔══██╗██╔══██╗╚══███╔╝╚██╗ ██╔╝██╔══██╗██╔════╝╚██╗██╔╝",
-    "█████╔╝ ██████╔╝███████║  ███╔╝  ╚████╔╝ ██║  ██║█████╗   ╚███╔╝ ",
-    "██╔═██╗ ██╔══██╗██╔══██║ ███╔╝    ╚██╔╝  ██║  ██║██╔══╝   ██╔██╗ ",
-    "██║  ██╗██║  ██║██║  ██║███████╗   ██║   ██████╔╝███████╗██╔╝ ██╗",
-    "╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═════╝ ╚══════╝╚═╝  ╚═╝"
-];
-
-const lines = [
-    "[core] ignition",
-    "[mem] scan ok",
-    "[ui ] compositing",
-    "[pty] linking sessions",
-    "[sys] telemetry online",
-    "[net] counters armed",
-    "[sec] sandbox locked",
-    "[gfx] glow pipeline",
-    "[core] READY"
-];
-
-function hexLine() {
-    const addr = Math.floor(Math.random() * 0xffff).toString(16).padStart(4, "0");
-    const bytes = Array.from({ length: 26 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0"));
-    return `${addr}: ${bytes.join(" ")}`;
-}
-
-async function runBoot() {
-    const bootOn = (localStorage.getItem("boot") ?? "1") === "1";
-    if (!bootOn) { boot.style.display = "none"; return; }
-
-    bootAscii.textContent = "";
-    bootLog.textContent = "";
-    bootHex.textContent = "";
-    bootFill.style.width = "0%";
-    bootPct.textContent = "0%";
-
-    for (const l of ascii) {
-        bootAscii.textContent += l + "\n";
-        await sleep(25);
-    }
-
-    for (let i = 0; i < lines.length; i++) {
-        bootLog.textContent += lines[i] + "\n";
-        for (let k = 0; k < 3; k++) bootHex.textContent += hexLine() + "\n";
-
-        const hx = bootHex.textContent.split("\n");
-        if (hx.length > 60) bootHex.textContent = hx.slice(-60).join("\n");
-
-        const pct = Math.round(((i + 1) / lines.length) * 100);
-        bootFill.style.width = `${pct}%`;
-        bootPct.textContent = `${pct}%`;
-
-        await sleep(120 + Math.floor(Math.random() * 120));
-    }
-
-    await sleep(220);
-    boot.classList.add("done");
-    await sleep(520);
-    boot.style.display = "none";
-}
-
-runBoot().catch(() => { });
-
-/* ---------- Views ---------- */
-function showView(name) {
-    activeView = name;
-    viewBtns.forEach(b => b.classList.toggle("active", b.dataset.view === name));
-    views.forEach(v => v.classList.toggle("show", v.dataset.view === name));
-    bControls.classList.toggle("hidden", name !== "browser");
-
-    if (name === "browser") showBrowser();
-    else window.api.browser.hide();
-}
-
-viewBtns.forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
-
-/* ---------- Palette ---------- */
-const actions = [
-    { name: "Go: Terminal", run: () => showView("terminal") },
-    { name: "Go: System", run: () => showView("system") },
-    { name: "Go: Browser", run: () => showView("browser") },
-    { name: "Go: Knowledge", run: () => showView("knowledge") },
-    { name: "Go: Tools", run: () => showView("tools") },
-    { name: "Go: Settings", run: () => showView("settings") },
-    { name: "Terminal: New session", run: () => createSession() },
-    { name: "Terminal: Toggle split", run: () => toggleSplitUI() },
-    { name: "Browser: Open example.com", run: () => { showView("browser"); window.api.browser.navigate("https://example.com"); } },
-];
-
-function openPalette() {
-    palette.classList.remove("hidden");
-    palInput.value = "";
-    renderPal("");
-    palInput.focus();
-}
-function closePalette() { palette.classList.add("hidden"); }
-function renderPal(q) {
-    palList.innerHTML = "";
-    const f = q.toLowerCase();
-    const shown = actions.filter(a => a.name.toLowerCase().includes(f)).slice(0, 12);
-    for (const a of shown) {
-        const d = document.createElement("div");
-        d.className = "palItem";
-        d.textContent = a.name;
-        d.onclick = () => { a.run(); closePalette(); };
-        palList.appendChild(d);
-    }
-}
-
-btnPal.addEventListener("click", openPalette);
-palInput.addEventListener("input", () => renderPal(palInput.value));
-palInput.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closePalette();
-    if (e.key === "Enter") palList.firstChild?.click();
-});
-palette.addEventListener("click", (e) => { if (e.target === palette) closePalette(); });
-
-window.addEventListener("keydown", (e) => {
-    if (e.ctrlKey && e.key.toLowerCase() === "k") { e.preventDefault(); openPalette(); }
-    if (e.ctrlKey && e.key.toLowerCase() === "f") { e.preventDefault(); showView("terminal"); tSearch.focus(); }
-    if (e.key === "Escape" && !palette.classList.contains("hidden")) closePalette();
-});
-
-/* ---------- Window controls ---------- */
-btnFull.addEventListener("click", async () => {
-    const on = await window.api.win.toggleFullscreen();
-    btnFull.textContent = on ? "FULL*" : "FULL";
-});
-btnAOT.addEventListener("click", async () => {
-    const on = await window.api.win.toggleAOT();
-    btnAOT.textContent = on ? "AOT*" : "AOT";
-});
-
-/* ---------- Browser ---------- */
-function browserBounds() {
-    const center = document.querySelector(".center").getBoundingClientRect();
-    const c = bControls.getBoundingClientRect();
-    return {
-        x: Math.round(center.left),
-        y: Math.round(c.bottom),
-        width: Math.round(center.width),
-        height: Math.round(center.bottom - c.bottom)
-    };
-}
-
-async function showBrowser(url) {
-    const b = browserBounds();
-    await window.api.browser.show(b, url || browserState.url || "https://example.com");
-    await window.api.browser.setBounds(b);
-}
-
-window.api.browser.onRequestBounds(() => {
-    if (activeView === "browser") window.api.browser.setBounds(browserBounds());
-});
-
-window.api.browser.onState((s) => {
-    browserState = s || browserState;
-    bUrl.value = browserState.url || bUrl.value;
-    bBack.disabled = !browserState.canGoBack;
-    bFwd.disabled = !browserState.canGoForward;
-});
-
-bBack.onclick = () => window.api.browser.back();
-bFwd.onclick = () => window.api.browser.fwd();
-bReload.onclick = () => window.api.browser.reload();
-bGo.onclick = () => { const u = bUrl.value.trim(); if (u) window.api.browser.navigate(u); };
-bUrl.addEventListener("keydown", (e) => { if (e.key === "Enter") bGo.click(); });
-
-/* Bookmarks */
-function getMarks() {
-    try { return JSON.parse(localStorage.getItem("marks") || "[]"); } catch { return []; }
-}
-function setMarks(arr) { localStorage.setItem("marks", JSON.stringify(arr)); renderMarks(); }
-
-function renderMarks() {
-    marks.innerHTML = "";
-    const arr = getMarks();
-    for (const u of arr) {
-        const m = document.createElement("div");
-        m.className = "mark";
-        m.textContent = u;
-        m.onclick = () => { showView("browser"); window.api.browser.navigate(u); };
-        marks.appendChild(m);
-    }
-}
-
-bStar.onclick = () => {
-    const u = (bUrl.value || browserState.url || "").trim();
-    if (!u) return;
-    const arr = getMarks();
-    if (!arr.includes(u)) arr.unshift(u);
-    setMarks(arr.slice(0, 12));
+// right
+const tabs = Array.from(document.querySelectorAll(".rtab"));
+const panes = {
+    net: document.getElementById("tab-net"),
+    bot: document.getElementById("tab-bot"),
+    browser: document.getElementById("tab-browser")
 };
 
-renderMarks();
+const netState = document.getElementById("netState");
+const netIPv4 = document.getElementById("netIPv4");
+const netPing = document.getElementById("netPing");
+const netDown = document.getElementById("netDown");
+const netUp = document.getElementById("netUp");
 
-/* ---------- Terminal sessions + split ---------- */
+// bot
+const botMode = document.getElementById("botMode");
+const chatLog = document.getElementById("chatLog");
+const chatForm = document.getElementById("chatForm");
+const chatInput = document.getElementById("chatInput");
+
+// browser controls
+const urlInput = document.getElementById("urlInput");
+const openUrlBtn = document.getElementById("openUrlBtn");
+const toggleFullBtn = document.getElementById("toggleFullBtn");
+const clearTermBtn = document.getElementById("clearTermBtn");
+
+// dock
+const dock = document.getElementById("dock");
+
+// keyboard
+const kbd = document.getElementById("kbd");
+
+// boot
+const boot = document.getElementById("boot");
+const bootLog = document.getElementById("bootLog");
+const bootBar = document.getElementById("bootBar");
+const bootHint = document.getElementById("bootHint");
+
+/* ---------- helpers ---------- */
 function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
 
-function addSessItem(id) {
-    const el = document.createElement("div");
-    el.className = "item";
-    el.dataset.id = id;
-    el.textContent = `#${id}`;
-    el.onclick = () => { setPane("A", id); };
-    return el;
+function writeStatus(msg) {
+    statusText.textContent = msg;
 }
 
-function renderSessList() {
-    sessList.innerHTML = "";
-    for (const id of sessions.keys()) {
-        const el = addSessItem(id);
-        if (id === activeA || id === activeB) el.classList.add("active");
-        sessList.appendChild(el);
+function addChatLine(role, text) {
+    const line = document.createElement("div");
+    line.textContent = `${role.toUpperCase()}: ${text}`;
+    line.style.marginBottom = "8px";
+    chatLog.appendChild(line);
+    chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+/* ---------- BOOT ---------- */
+const bootLines = [
+    "[core] verifying integrity…",
+    "[ui] loading HUD layout…",
+    "[term] binding PTY interface…",
+    "[net] telemetry stream online…",
+    "[bot] checking local model…",
+    "[gfx] calibrating display…",
+    "[core] ready."
+];
+
+let bootSkip = false;
+window.addEventListener("keydown", () => { bootSkip = true; }, { once: true });
+
+async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function runBoot() {
+    bootLog.textContent = "";
+    bootBar.style.width = "0%";
+    bootHint.textContent = "binding subsystems…";
+
+    for (let i = 0; i < bootLines.length; i++) {
+        if (bootSkip) break;
+        bootLog.textContent += bootLines[i] + "\n";
+        bootBar.style.width = `${Math.round(((i + 1) / bootLines.length) * 100)}%`;
+        await sleep(220);
     }
-    refreshSelects();
+    bootHint.textContent = "entering HUD…";
+    await sleep(250);
+    boot.style.display = "none";
+}
+runBoot().catch(() => { boot.style.display = "none"; });
+
+/* ---------- CLOCK ---------- */
+const startMs = Date.now();
+function updateClock() {
+    const d = new Date();
+    clockTime.textContent = d.toLocaleTimeString([], { hour12: false });
+    clockDate.textContent = d.toLocaleDateString([], { year: "numeric", month: "short", day: "2-digit" });
+
+    const up = Math.floor((Date.now() - startMs) / 1000);
+    const hh = String(Math.floor(up / 3600)).padStart(2, "0");
+    const mm = String(Math.floor((up % 3600) / 60)).padStart(2, "0");
+    const ss = String(up % 60).padStart(2, "0");
+    clockUptime.textContent = `UPTIME ${hh}:${mm}:${ss}`;
+}
+setInterval(updateClock, 250);
+updateClock();
+
+/* ---------- TERMINAL ---------- */
+const term = new Terminal({
+    cursorBlink: true,
+    scrollback: 8000,
+    fontSize: 14,
+    lineHeight: 1.15,
+    theme: {
+        background: "#000000",
+        foreground: "#e6eef7",
+        cursor: "#e6eef7",
+        selection: "rgba(230,238,247,0.18)"
+    }
+});
+
+const fit = new FitAddon();
+term.loadAddon(fit);
+term.open(termEl);
+fit.fit();
+term.focus();
+
+function getDims() {
+    const d = fit.proposeDimensions();
+    if (!d) return { cols: 120, rows: 30 };
+    return d;
 }
 
-function refreshSelects() {
-    const ids = Array.from(sessions.keys());
-    const fill = (sel, active) => {
-        sel.innerHTML = "";
-        for (const id of ids) {
-            const o = document.createElement("option");
-            o.value = id;
-            o.textContent = `#${id}`;
-            if (id === active) o.selected = true;
-            sel.appendChild(o);
-        }
-    };
-    fill(selA, activeA);
-    fill(selB, activeB);
-}
+(async () => {
+    const { cols, rows } = getDims();
+    await window.api.terminal.create(cols, rows);
+    writeStatus("online");
+})();
 
-function makeTerminalHost() {
-    const host = document.createElement("div");
-    host.style.height = "100%";
-    host.style.width = "100%";
-    return host;
-}
+window.api.terminal.onData((data) => term.write(data));
+term.onData((data) => window.api.terminal.write(data));
 
-function createXterm() {
-    const term = new Terminal({
-        cursorBlink: true,
-        scrollback: 12000,
-        fontSize,
-        lineHeight: 1.14,
-        theme: {
-            background: "#05080d",
-            foreground: getComputedStyle(document.body).getPropertyValue("--fg").trim() || "#cfe7ff",
-            cursor: getComputedStyle(document.body).getPropertyValue("--accent").trim() || "#6fe7ff",
-            selection: "rgba(111,231,255,0.20)"
-        }
-    });
-
-    const fit = new FitAddon();
-    const search = new SearchAddon();
-    const links = new WebLinksAddon((_e, uri) => {
-        showView("browser");
-        window.api.browser.navigate(uri);
-    });
-
-    term.loadAddon(fit);
-    term.loadAddon(search);
-    term.loadAddon(links);
-
-    return { term, fit, search };
-}
-
-async function createSession() {
-    const host = makeTerminalHost();
-    stash.appendChild(host);
-
-    const { term, fit, search } = createXterm();
-    term.open(host);
+window.addEventListener("resize", () => {
     fit.fit();
-
-    const dims = fit.proposeDimensions() || { cols: 120, rows: 30 };
-    const res = await window.api.term.new(dims.cols, dims.rows);
-    const id = res.id;
-
-    sessions.set(id, { term, fit, search, host });
-
-    term.onData((data) => window.api.term.write(id, data));
-    term.writeln(`\x1b[1;36mKrazyDEX ULTRA session #${id}\x1b[0m`);
-    term.writeln(`\x1b[2;37mCtrl+K palette • Ctrl+F search • links click => Browser\x1b[0m`);
-
-    if (!activeA) setPane("A", id);
-    if (split && !activeB && id !== activeA) setPane("B", id);
-
-    renderSessList();
-    status.textContent = `session #${id} online`;
-    return id;
-}
-
-function attachTo(mount, id) {
-    const s = sessions.get(id);
-    if (!s) return;
-    mount.innerHTML = "";
-    mount.appendChild(s.host);
-    s.fit.fit();
-    const dims = s.fit.proposeDimensions();
-    if (dims) window.api.term.resize(id, dims.cols, dims.rows);
-    s.term.focus();
-}
-
-function setPane(which, id) {
-    if (!sessions.has(id)) return;
-    if (which === "A") activeA = id;
-    if (which === "B") activeB = id;
-
-    attachTo(which === "A" ? mountA : mountB, id);
-    renderSessList();
-}
-
-selA.addEventListener("change", () => setPane("A", selA.value));
-selB.addEventListener("change", () => setPane("B", selB.value));
-
-function toggleSplitUI() {
-    split = !split;
-    paneB.classList.toggle("hidden", !split);
-
-    if (split) {
-        if (!activeB) {
-            const other = Array.from(sessions.keys()).find(x => x !== activeA);
-            if (other) setPane("B", other);
-        } else {
-            attachTo(mountB, activeB);
-        }
-    } else {
-        // stash pane B host if exists
-        if (activeB) {
-            const s = sessions.get(activeB);
-            if (s) stash.appendChild(s.host);
-        }
-        activeB = null;
-    }
-
-    renderSessList();
-}
-
-toggleSplit.addEventListener("click", toggleSplitUI);
-
-newSess.addEventListener("click", () => createSession());
-killSess.addEventListener("click", async () => {
-    const id = activeA;
-    if (!id) return;
-    await window.api.term.kill(id);
+    const { cols, rows } = getDims();
+    window.api.terminal.resize(cols, rows);
 });
 
-window.api.term.onClosed(({ id }) => {
-    const sid = String(id);
-    const s = sessions.get(sid);
-    s?.host?.remove();
-    sessions.delete(sid);
-
-    if (activeA === sid) activeA = null;
-    if (activeB === sid) activeB = null;
-
-    const first = Array.from(sessions.keys())[0] || null;
-    if (first) setPane("A", first);
-
-    if (split) {
-        const second = Array.from(sessions.keys()).find(x => x !== activeA) || null;
-        if (second) setPane("B", second);
-    }
-
-    renderSessList();
+/* ---------- TAB SWITCH ---------- */
+tabs.forEach(btn => {
+    btn.addEventListener("click", () => {
+        tabs.forEach(b => b.classList.remove("rtab--active"));
+        btn.classList.add("rtab--active");
+        const which = btn.dataset.tab;
+        Object.entries(panes).forEach(([k, el]) => {
+            el.classList.toggle("tabpane--active", k === which);
+        });
+    });
 });
 
-window.api.term.onData(({ id, data }) => {
-    const s = sessions.get(String(id));
-    if (s) s.term.write(data);
-});
-
-function activeSearchObj() {
-    if (!activeA) return null;
-    return sessions.get(activeA);
-}
-
-tSearch.addEventListener("keydown", (e) => {
-    const q = tSearch.value.trim();
-    if (!q) return;
-    if (e.key === "Enter") {
-        const s = activeSearchObj();
-        if (!s) return;
-        if (e.shiftKey) s.search.findPrevious(q);
-        else s.search.findNext(q);
-    }
-});
-
-tClear.onclick = () => sessions.get(activeA)?.term.clear();
-
-tCopy.onclick = async () => {
-    const s = sessions.get(activeA);
-    const text = s?.term.getSelection() || "";
-    if (!text) return;
-    try { await navigator.clipboard.writeText(text); } catch { }
-};
-
-tPaste.onclick = async () => {
-    const txt = await navigator.clipboard.readText().catch(() => "");
-    if (txt && activeA) window.api.term.write(activeA, txt);
-};
-
-function applyFont(newSize) {
-    fontSize = clamp(newSize, 10, 22);
-    localStorage.setItem("fontSize", String(fontSize));
-    for (const [id, s] of sessions) {
-        s.term.options.fontSize = fontSize;
-        s.fit.fit();
-        const dims = s.fit.proposeDimensions();
-        if (dims) window.api.term.resize(id, dims.cols, dims.rows);
-    }
-}
-tFontUp.onclick = () => applyFont(fontSize + 1);
-tFontDn.onclick = () => applyFont(fontSize - 1);
-
-/* quick buttons */
-$("qSys").onclick = () => activeA && window.api.term.write(activeA, "systeminfo\r\n");
-$("qIP").onclick = () => activeA && window.api.term.write(activeA, "ipconfig\r\n");
-$("qDir").onclick = () => activeA && window.api.term.write(activeA, "dir\r\n");
-$("qWiki").onclick = () => { showView("browser"); window.api.browser.navigate("https://en.wikipedia.org"); };
-
-/* first session */
-createSession().catch(() => { });
-
-/* ---------- Telemetry UI ---------- */
-const cpuHist = Array(80).fill(0);
-const netHist = Array(80).fill(0);
-
-function drawGraph(canvas, arr, label) {
+/* ---------- graphs ---------- */
+function drawSpark(canvas, data) {
     const ctx = canvas.getContext("2d");
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    // background grid
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = "#e6eef7";
     ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i++) {
-        const y = Math.round((h * i) / 4);
+    for (let x = 0; x <= w; x += 40) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+    for (let y = 0; y <= h; y += 20) {
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
     }
+    ctx.globalAlpha = 1;
 
-    ctx.strokeStyle = "rgba(0,255,123,0.85)";
+    if (data.length < 2) return;
+
+    ctx.strokeStyle = "#e6eef7";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    for (let i = 0; i < arr.length; i++) {
-        const x = (i / (arr.length - 1)) * w;
-        const y = h - (arr[i] * h);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    for (let i = 0; i < data.length; i++) {
+        const x = (i / (data.length - 1)) * (w - 6) + 3;
+        const y = h - ((data[i] / 100) * (h - 6) + 3);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
     }
     ctx.stroke();
-
-    ctx.fillStyle = "rgba(207,231,255,0.75)";
-    ctx.font = "12px monospace";
-    ctx.fillText(label, 8, 14);
 }
 
-window.api.sys.onHw((p) => {
-    hw.textContent = `CPU: ${p.cpu}\nOS: ${p.platform}\nHOST: ${p.hostname}`;
-});
+const cpuHist = [];
+const netHist = [];
 
-window.api.sys.onStats((s) => {
-    const cpu = clamp(s.cpu, 0, 100);
-    const memPct = Math.round((s.memUsedMB / Math.max(1, s.memTotalMB)) * 100);
-
-    cpuBar.style.width = `${cpu}%`;
-    memBar.style.width = `${clamp(memPct, 0, 100)}%`;
-
-    const bat = s.batteryPct == null ? "" : ` • BAT ${s.batteryPct}%${s.charging ? "⚡" : ""}`;
-    line.textContent = `CPU ${cpu}% • MEM ${s.memUsedMB}/${s.memTotalMB} MB • NET ↓${s.rxKBs} ↑${s.txKBs} KB/s${bat}`;
-    mini.textContent = `CPU ${cpu}% • MEM ${memPct}%`;
-
-    cpuHist.push(cpu / 100); cpuHist.shift();
-    const net = Math.min(1, (s.rxKBs + s.txKBs) / 4000);
-    netHist.push(net); netHist.shift();
-
-    drawGraph(gCpu, cpuHist, "CPU LOAD");
-    drawGraph(gNet, netHist, "NET");
-});
-
-window.api.sys.onProcs(({ list }) => {
-    const rows = [];
-    rows.push(`<div class="tr head"><div>PID</div><div>NAME</div><div>CPU%</div><div>MEM</div></div>`);
-    for (const p of (list || [])) {
-        rows.push(`<div class="tr"><div>${p.pid}</div><div>${p.name}</div><div>${p.cpu.toFixed(1)}</div><div>${p.memMB}MB</div></div>`);
-    }
-    procs.innerHTML = rows.join("");
-});
-
-window.api.sys.onDisks(({ disks: d }) => {
-    const rows = [];
-    rows.push(`<div class="tr head"><div>FS</div><div>SIZE</div><div>USED</div><div>%</div></div>`);
-    for (const x of (d || [])) {
-        rows.push(`<div class="tr"><div>—</div><div>${x.fs}</div><div>${x.usedGB}/${x.sizeGB}GB</div><div>${x.usePct}%</div></div>`);
-    }
-    disks.innerHTML = rows.join("");
-});
-
-/* ---------- Knowledge (Wikipedia) ---------- */
-function addChat(role, text) {
-    const row = document.createElement("div");
-    row.className = "chatRow";
-    const tag = document.createElement("div");
-    tag.className = "chatTag";
-    tag.textContent = role.toUpperCase();
-    const bubble = document.createElement("div");
-    bubble.className = "chatBubble";
-    bubble.textContent = text;
-    row.appendChild(tag);
-    row.appendChild(bubble);
-    chatLog.appendChild(row);
-    chatLog.scrollTop = chatLog.scrollHeight;
+function pushHist(arr, v, max = 60) {
+    arr.push(v);
+    while (arr.length > max) arr.shift();
 }
 
-const wikiCache = new Map();
+/* ---------- stylized globe ---------- */
+function drawGlobe() {
+    const ctx = globe.getContext("2d");
+    const w = globe.width, h = globe.height;
+    ctx.clearRect(0, 0, w, h);
 
-async function wikiSearch(q) {
-    const query = encodeURIComponent(q);
-    const url = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${query}&limit=1&namespace=0&format=json&origin=*`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Wiki search failed (${res.status})`);
+    // sphere outline
+    const cx = w / 2, cy = h / 2, r = Math.min(w, h) * 0.42;
+    ctx.strokeStyle = "rgba(230,238,247,0.35)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // dot field on sphere
+    ctx.fillStyle = "rgba(230,238,247,0.55)";
+    for (let i = 0; i < 900; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const b = (Math.random() - 0.5) * Math.PI;
+        const x = cx + Math.cos(a) * Math.cos(b) * r;
+        const y = cy + Math.sin(b) * r;
+        // simple shading
+        const shade = (Math.cos(a) * Math.cos(b) + 1) / 2;
+        if (Math.random() > shade) continue;
+        ctx.globalAlpha = 0.15 + shade * 0.65;
+        ctx.fillRect(x, y, 1.5, 1.5);
+    }
+    ctx.globalAlpha = 1;
+
+    // latitude lines
+    ctx.strokeStyle = "rgba(230,238,247,0.10)";
+    for (let t = -2; t <= 2; t++) {
+        const yy = cy + (t * r) / 3;
+        ctx.beginPath();
+        ctx.ellipse(cx, yy, r * Math.cos((t / 3) * 1.05), r * 0.08, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+}
+drawGlobe();
+
+/* ---------- SYSTEM STATS ---------- */
+sysType.textContent = "win";
+sysPlatform.textContent = navigator.platform || "unknown";
+sysHost.textContent = "local";
+
+window.api.system.onStats((s) => {
+    // bars
+    const memP = clamp(Math.round((s.memUsedMB / Math.max(1, s.memTotalMB)) * 100), 0, 100);
+    cpuBar.style.width = `${clamp(s.cpu, 0, 100)}%`;
+    memBar.style.width = `${memP}%`;
+    cpuPct.textContent = `${clamp(s.cpu, 0, 100)}%`;
+    memPct.textContent = `${memP}%`;
+
+    // graphs
+    pushHist(cpuHist, clamp(s.cpu, 0, 100));
+    drawSpark(cpuGraph, cpuHist);
+
+    const down = clamp(s.rxKBs ?? 0, 0, 999999);
+    const up = clamp(s.txKBs ?? 0, 0, 999999);
+    netDown.textContent = `${down} KB/s`;
+    netUp.textContent = `${up} KB/s`;
+
+    // normalize traffic to 0-100 for sparkline
+    const trafficNorm = clamp(Math.log10(1 + down + up) * 25, 0, 100);
+    pushHist(netHist, trafficNorm);
+    drawSpark(netGraph, netHist);
+
+    netState.textContent = "ONLINE";
+    netPing.textContent = `${Math.round(30 + Math.random() * 25)}ms`; // placeholder ping
+    netIPv4.textContent = "(runner/local)";
+});
+
+/* ---------- DOCK ---------- */
+dock.addEventListener("click", (e) => {
+    const btn = e.target.closest(".dock-item");
+    if (!btn) return;
+    const a = btn.dataset.action;
+    if (a === "browser") {
+        tabs.find(x => x.dataset.tab === "browser")?.click();
+        urlInput.focus();
+    } else if (a === "help") {
+        term.write("\r\nKrazyDEX shortcuts:\r\n- Dock: Browser / Help / Clear / Full\r\n- Right tabs: Network / Bot / Browser\r\n\r\n");
+    } else if (a === "clear") {
+        term.clear();
+    } else if (a === "fullscreen") {
+        window.api.window.toggleFullscreen();
+    }
+});
+
+/* ---------- BROWSER ---------- */
+openUrlBtn.addEventListener("click", async () => {
+    const raw = (urlInput.value || "").trim();
+    if (!raw) return;
+    await window.api.browser.open(raw);
+});
+
+toggleFullBtn.addEventListener("click", () => window.api.window.toggleFullscreen());
+clearTermBtn.addEventListener("click", () => term.clear());
+
+/* ---------- ON-SCREEN KEYBOARD ---------- */
+const layout = [
+    ["ESC", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "BACK"],
+    ["TAB", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[", "]", "\\"],
+    ["CAPS", "A", "S", "D", "F", "G", "H", "J", "K", "L", ";", "'", "ENTER"],
+    ["SHIFT", "Z", "X", "C", "V", "B", "N", "M", ",", ".", "/", "SHIFT"],
+    ["CTRL", "FN", "ALT", "SPACE", "ALT", "CTRL"]
+];
+
+function keyToSend(k) {
+    if (k === "ENTER") return "\r\n";
+    if (k === "TAB") return "\t";
+    if (k === "SPACE") return " ";
+    if (k === "BACK") return "\x7f"; // backspace
+    if (k === "ESC") return "\x1b";
+    return k.length === 1 ? k : "";
+}
+
+function buildKeyboard() {
+    kbd.innerHTML = "";
+    layout.forEach((row) => {
+        row.forEach((k) => {
+            const b = document.createElement("div");
+            b.className = "key";
+            b.textContent = k;
+
+            // widths
+            if (k === "BACK") b.classList.add("w2");
+            if (k === "TAB") b.classList.add("w2");
+            if (k === "CAPS") b.classList.add("w2");
+            if (k === "ENTER") b.classList.add("w2");
+            if (k === "SHIFT") b.classList.add("w3");
+            if (k === "SPACE") b.classList.add("w6");
+
+            b.addEventListener("click", () => {
+                term.focus();
+                const send = keyToSend(k);
+                if (send) window.api.terminal.write(send);
+                if (k === "ENTER") window.api.terminal.write(""); // noop
+            });
+
+            kbd.appendChild(b);
+        });
+    });
+}
+buildKeyboard();
+
+/* ---------- “REAL” OFFLINE CHATBOT (LOCAL LLM OPTION) ---------- */
+/**
+ * If you install Ollama locally:
+ * 1) Install Ollama
+ * 2) Run: ollama pull llama3.2
+ * 3) Keep Ollama running
+ * This app will talk to it at http://localhost:11434 (local machine only).
+ */
+const OLLAMA_URL = "http://localhost:11434/api/generate";
+const OLLAMA_MODEL = "llama3.2"; // change if you want
+
+let ollamaOk = null;
+
+async function ollamaGenerate(prompt) {
+    const res = await fetch(OLLAMA_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            model: OLLAMA_MODEL,
+            prompt,
+            stream: false
+        })
+    });
+    if (!res.ok) throw new Error("ollama http " + res.status);
     const data = await res.json();
-    return { title: (data?.[1] || [])[0] || null, link: (data?.[3] || [])[0] || null };
+    return (data.response || "").trim();
 }
 
-async function wikiSummary(title) {
-    const t = encodeURIComponent(title);
-    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${t}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Wiki summary failed (${res.status})`);
-    const data = await res.json();
-    return { extract: (data?.extract || "").trim(), pageUrl: data?.content_urls?.desktop?.page || null };
+function offlineFallbackAnswer(q) {
+    const t = q.trim().toLowerCase();
+    if (t.includes("time")) return `Time: ${new Date().toLocaleTimeString()}`;
+    if (t.includes("date") || t.includes("day")) return `Date: ${new Date().toLocaleDateString()}`;
+    if (t.includes("hello") || t.includes("hi")) return "Hello. (Tip: install Ollama locally for full answers.)";
+    return "I’m running in fallback mode. Install Ollama locally to get real Siri-like Q&A offline.";
 }
 
-function topic(text) {
-    const t = text.trim();
-    const pats = [/^what is (.+)$/i, /^who is (.+)$/i, /^tell me about (.+)$/i, /^define (.+)$/i, /^explain (.+)$/i];
-    for (const re of pats) {
-        const m = t.match(re);
-        if (m?.[1]) return m[1].trim();
+async function ensureOllama() {
+    if (ollamaOk !== null) return ollamaOk;
+    try {
+        await ollamaGenerate("Say 'OK' only.");
+        ollamaOk = true;
+        botMode.textContent = `LOCAL LLM (${OLLAMA_MODEL})`;
+        return true;
+    } catch {
+        ollamaOk = false;
+        botMode.textContent = "OFFLINE (FALLBACK)";
+        return false;
     }
-    if (t.length <= 60 && !t.includes("?")) return t;
-    return null;
 }
-
-async function answer(text) {
-    const top = topic(text);
-    if (!top) return "Ask: “what is …”, “who is …”, “tell me about …”.";
-    const key = top.toLowerCase();
-    if (wikiCache.has(key)) return wikiCache.get(key);
-
-    const { title, link } = await wikiSearch(top);
-    if (!title) return "No match. Try different words.";
-
-    const { extract, pageUrl } = await wikiSummary(title);
-    const out = (extract || `Found: ${title}`) + (pageUrl || link ? `\n\nMore: ${pageUrl || link}` : "");
-    wikiCache.set(key, out);
-    return out;
-}
+ensureOllama().catch(() => { });
 
 chatForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const text = chatInput.value.trim();
-    if (!text) return;
-
-    addChat("you", text);
+    const q = (chatInput.value || "").trim();
+    if (!q) return;
     chatInput.value = "";
 
-    addChat("bot", "…searching");
-    const row = chatLog.lastElementChild;
+    addChatLine("you", q);
+    writeStatus("bot: thinking…");
 
+    const ok = await ensureOllama();
     try {
-        const out = await answer(text);
-        row.querySelector(".chatBubble").textContent = out;
+        if (ok) {
+            const a = await ollamaGenerate(q);
+            addChatLine("bot", a || "(no response)");
+        } else {
+            addChatLine("bot", offlineFallbackAnswer(q));
+        }
     } catch (err) {
-        row.querySelector(".chatBubble").textContent =
-            "Wikipedia unreachable. Use Browser tab.\n\n" + String(err?.message || err);
+        addChatLine("bot", "Error talking to local model. Is Ollama running?");
+    } finally {
+        writeStatus("online");
     }
 });
-
-/* ---------- Tools ---------- */
-function safeCalc(expr) {
-    const ok = /^[0-9+\-*/().\s%]+$/.test(expr);
-    if (!ok) return "Blocked.";
-    try {
-        // eslint-disable-next-line no-new-func
-        return String(Function(`"use strict"; return (${expr});`)());
-    } catch {
-        return "Error";
-    }
-}
-
-calcRun.onclick = () => {
-    const x = calcIn.value.trim();
-    if (!x) return;
-    calcOut.textContent = `Result: ${safeCalc(x)}`;
-};
-
-notes.value = localStorage.getItem("notes") || "";
-notes.addEventListener("input", () => localStorage.setItem("notes", notes.value));
-
-b64Enc.onclick = () => { b64Box.value = btoa(unescape(encodeURIComponent(b64Box.value))); };
-b64Dec.onclick = () => {
-    try { b64Box.value = decodeURIComponent(escape(atob(b64Box.value))); }
-    catch { b64Box.value = "INVALID BASE64"; }
-};
-
-jsonFmt.onclick = () => {
-    try { jsonBox.value = JSON.stringify(JSON.parse(jsonBox.value), null, 2); }
-    catch { jsonBox.value = "INVALID JSON"; }
-};
-
-/* ---------- Resize handling ---------- */
-window.addEventListener("resize", () => {
-    // refit both panes
-    if (activeA) {
-        const s = sessions.get(activeA);
-        s?.fit.fit();
-        const d = s?.fit.proposeDimensions();
-        if (d) window.api.term.resize(activeA, d.cols, d.rows);
-    }
-    if (split && activeB) {
-        const s = sessions.get(activeB);
-        s?.fit.fit();
-        const d = s?.fit.proposeDimensions();
-        if (d) window.api.term.resize(activeB, d.cols, d.rows);
-    }
-    if (activeView === "browser") window.api.browser.setBounds(browserBounds());
-});
-
-/* Start */
-showView("terminal");
-status.textContent = "online";
